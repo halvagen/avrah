@@ -1,0 +1,61 @@
+image: archlinux
+secrets:
+  - ec80f674-e270-485d-afb3-e8dc40c386cc
+packages:
+  - git
+  - rustup
+  - python
+  - python-pip
+sources:
+  - git@git.sr.ht:~coder_kalyan/halvagen
+  - git@git.sr.ht:~coder_kalyan/avrah
+  - git@git.sr.ht:~coder_kalyan/avr-atdf
+  - git@git.sr.ht:~coder_kalyan/avr-assembly-headers
+tasks:
+  - dependencies: |
+      rustup toolchain install nightly
+      cargo install atdf2svd --version 0.3.1
+      cargo install svd2rust --version 0.19.0
+      cargo install form
+      rustup component add --toolchain nightly rustfmt
+      pip install svdtools
+  - build: |
+      cd halvagen
+      cargo build --release
+      cargo install --path .
+      export PATH="/home/build/.cargo/bin:/home/build/.local/bin:$PATH"
+      echo 'export PATH="/home/build/.cargo/bin:/home/build/.local/bin:$PATH"' >> ~/.bashrc
+  - generate-svd: |
+      source ~/.bashrc
+      cd avr-atdf
+      mkdir svd
+      for file in vendor/*.atdf
+      do
+        atdf2svd ${file} "svd/$(basename $file .atdf).svd"
+      done
+      cd patch
+      for patch in *.yaml
+      do
+        base=$(basename $patch .yaml)
+        [ -f "../svd/${base}.svd" ] && svd patch $patch
+      done
+  - generate-asm: |
+      source ~/.bashrc
+      mkdir ~/hlvg-out
+      cd avr-atdf/svd
+      for file in *.svd.patched
+      do
+        hlvg --template ~/avrah/template --output "$HOME/hlvg-out/$(basename $file .svd.patched)" $file
+      done
+  - upload-asm: |
+      cd ~/avr-atdf
+      commit=$(git rev-parse --short HEAD)
+      cd ~/avr-assembly-headers
+      cp -r ~/hlvg-out/* .
+      git config --global user.name "Kalyan Sriram"
+      git config --global user.email "coder.kalyan@gmail.com"
+      git add .
+      git commit -m "buildbot: update avr-atdf to $commit"
+      GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=no" git push
+artifacts:
+  - avr-atdf/svd/out
