@@ -1,0 +1,8 @@
+children:
+  - type: file
+    name: "device.asm"
+    template: device.asm
+  - type: file
+    name: "{{ peripheral.name | lower }}.asm"
+    template: peripheral.asm
+    enumerate: "device.peripherals"
